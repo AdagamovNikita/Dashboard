@@ -16,65 +16,71 @@ def init_db():
                 category_P_id INTEGER,
                 brand_name TEXT,
                 FOREIGN KEY (category_P_id) REFERENCES ProductCategory(category_id)
-            );
+            ); 
+            CREATE TABLE ProductCategory (
+                category_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                category_name TEXT NOT NULL
+            ); 
             CREATE TABLE ProductOption (
-                product_PO_id INTEGER,
                 barcode_id TEXT PRIMARY KEY,
+                product_PO_id INTEGER,
                 quantity INTEGER NOT NULL,
-                wholesale_price INTEGER NOT NULL, 
-                sale_price  INTEGER NOT NULL,
+                wholesale_price INTEGER NOT NULL,
+                sale_price INTEGER NOT NULL,
                 FOREIGN KEY (product_PO_id) REFERENCES Product(product_id)
-            );
+            ); 
+            CREATE TABLE AttributeName (
+                attribute_name_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                attribute_name TEXT NOT NULL UNIQUE
+            ); 
+            CREATE TABLE AttributeValue (
+                attribute_value_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                attribute_value TEXT NOT NULL UNIQUE
+            ); 
             CREATE TABLE ProductAttribute (
                 barcode_PA_id TEXT,
-                attribute_id INTEGER,
-                attribute_name TEXT NOT NULL,
-                attribute_value TEXT NOT NULL,
-                PRIMARY KEY (barcode_PA_id, attribute_id),
-                FOREIGN KEY (barcode_PA_id) REFERENCES ProductOption(barcode_id)
-            );
+                attribute_name_id INTEGER,
+                attribute_value_id INTEGER,
+                PRIMARY KEY (barcode_PA_id, attribute_name_id, attribute_value_id),
+                FOREIGN KEY (barcode_PA_id) REFERENCES ProductOption(barcode_id),
+                FOREIGN KEY (attribute_name_id) REFERENCES AttributeName(attribute_name_id),
+                FOREIGN KEY (attribute_value_id) REFERENCES AttributeValue(attribute_value_id)
+            ); 
             CREATE TABLE PriceHistory (
                 barcode_PH_id TEXT,
-                price_id  INTEGER PRIMARY KEY AUTOINCREMENT,
+                price_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 old_price INTEGER NOT NULL,
                 new_price INTEGER NOT NULL,
                 change_date DATETIME NOT NULL,
                 FOREIGN KEY (barcode_PH_id) REFERENCES ProductOption(barcode_id)
-            );
-            CREATE TABLE ProductCategory (
-                category_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                category_name TEXT  NOT NULL
-            );
-            CREATE  TABLE Supplier (
+            ); 
+            CREATE TABLE Supplier (
                 supplier_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 supplier_name TEXT NOT NULL,
                 phone_number TEXT,
                 address TEXT
-            );
+            ); 
             CREATE TABLE ProductSupplier (
                 product_PS_id INTEGER,
                 supplier_PS_id INTEGER,
                 PRIMARY KEY (product_PS_id, supplier_PS_id),
                 FOREIGN KEY (product_PS_id) REFERENCES Product(product_id),
                 FOREIGN KEY (supplier_PS_id) REFERENCES Supplier(supplier_id)
-            );
-            CREATE TABLE Sale (
-                sale_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                sale_date  DATETIME NOT NULL,
-                source_name TEXT,
-                code_S_id TEXT,
-                tax_rate INTEGER,
-                total_price_without_vat INTEGER NOT NULL,
-                vat_paid INTEGER NOT NULL,
-                total_price_with_vat INTEGER NOT NULL,
-                FOREIGN KEY (code_S_id) REFERENCES PromoCode(code_id)
-            );
+            ); 
             CREATE TABLE PromoCode (
                 code_id TEXT PRIMARY KEY,
                 discount_percentage INTEGER NOT NULL,
-                valid_from DATE  NOT NULL,
+                valid_from DATE NOT NULL,
                 valid_to DATE NOT NULL
-            );
+            ); 
+            CREATE TABLE Sale (
+                sale_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sale_date DATETIME NOT NULL,
+                source_name TEXT,
+                code_S_id TEXT,
+                tax_rate INTEGER,
+                FOREIGN KEY (code_S_id) REFERENCES PromoCode(code_id)
+            ); 
             CREATE TABLE SaleItem (
                 sale_SI_id INTEGER,
                 sale_item_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -82,9 +88,162 @@ def init_db():
                 quantity_sold INTEGER NOT NULL,
                 price_sold_without_vat INTEGER NOT NULL,
                 FOREIGN KEY (sale_SI_id) REFERENCES Sale(sale_id),
-                FOREIGN KEY  (barcode_SI_id) REFERENCES ProductOption(barcode_id)
+                FOREIGN KEY (barcode_SI_id) REFERENCES ProductOption(barcode_id)
             );
         ''')
+
+
+
+#now I am making views for all complex queries as you asked.
+        cursor.execute('''
+            CREATE VIEW SearchBrandView AS
+            SELECT
+                p.brand_name AS Brand,
+                p.model AS Model,
+                an.attribute_name AS AttributeName,
+                av.attribute_value AS AttributeValue,
+                po.quantity AS Quantity,
+                po.wholesale_price AS WholesalePrice,
+                po.sale_price AS SalePrice,
+                '-' AS NewPrice,
+                '-' AS ChangeDate,
+                MAX(pc.code_id) AS PromoCode
+            FROM 
+                Product p
+            JOIN 
+                ProductOption po ON p.product_id = po.product_PO_id
+            LEFT JOIN 
+                ProductAttribute pa ON po.barcode_id = pa.barcode_PA_id
+            LEFT JOIN
+                AttributeName an ON pa.attribute_name_id = an.attribute_name_id
+            LEFT JOIN
+                AttributeValue av ON pa.attribute_value_id = av.attribute_value_id
+            LEFT JOIN 
+                SaleItem si ON po.barcode_id = si.barcode_SI_id
+            LEFT JOIN 
+                Sale s ON si.sale_SI_id = s.sale_id
+            LEFT JOIN 
+                PromoCode pc ON s.code_S_id = pc.code_id
+            GROUP BY 
+                p.brand_name, p.model, an.attribute_name, av.attribute_value, 
+                po.quantity, po.wholesale_price, po.sale_price
+            ORDER BY 
+                p.brand_name, p.model;
+        ''')
+        cursor.execute('''
+            CREATE VIEW TopProductsView AS
+            SELECT 
+                p.brand_name AS Brand,
+                p.model AS Model,
+                SUM(si.quantity_sold) AS TotalQuantitySold
+            FROM 
+                SaleItem si
+            JOIN 
+                ProductOption po ON si.barcode_SI_id= po.barcode_id
+            JOIN 
+                Product p ON po.product_PO_id = p.product_id
+            GROUP BY 
+                p.product_id,p.brand_name, p.model
+            ORDER BY 
+                TotalQuantitySold DESC
+            LIMIT 5
+        ''')
+        cursor.execute('''
+            CREATE VIEW TopCategoriesView AS
+            SELECT 
+                pc.category_name AS Category,
+                COUNT(p.product_id) AS NumberOfProducts,
+                SUM(si.quantity_sold) AS TotalQuantitySold
+            FROM 
+                ProductCategory pc
+            JOIN 
+                Product p ON pc.category_id = p.category_P_id
+            JOIN 
+                ProductOption po ON p.product_id = po.product_PO_id
+            JOIN 
+                SaleItem si ON po.barcode_id = si.barcode_SI_id
+            GROUP BY 
+                pc.category_id,pc.category_name
+            ORDER BY 
+                TotalQuantitySold DESC
+            LIMIT 5
+            ''')
+        cursor.execute('''
+            CREATE VIEW ProductDetailsView AS
+            SELECT 
+                p.brand_name AS Brand,
+                p.model AS Model,
+                po.sale_price AS SalePrice,
+                SUM(si.quantity_sold) AS TotalQuantitySold,
+                ((po.sale_price - po.wholesale_price) * 100.0 / po.sale_price) AS MarginPercentage,
+                s.supplier_name AS SupplierName,
+                s.phone_number AS Phone,
+                s.address AS Address
+            FROM 
+                SaleItem si
+            JOIN 
+                ProductOption po ON si.barcode_SI_id = po.barcode_id
+            JOIN 
+                Product p ON po.product_PO_id = p.product_id
+            JOIN 
+                ProductSupplier ps ON p.product_id = ps.product_PS_id
+            JOIN 
+                Supplier s ON ps.supplier_PS_id = s.supplier_id
+            GROUP BY 
+                p.product_id, p.brand_name, p.model, po.sale_price, po.wholesale_price, s.supplier_name, s.phone_number, s.address
+            ORDER BY 
+                TotalQuantitySold DESC
+            ''')
+        cursor.execute('''
+            CREATE VIEW CategoryDetailsView AS
+            SELECT 
+                pc.category_name AS Category,
+                COUNT(p.product_id) AS NumberOfProducts,
+                SUM(si.quantity_sold) AS TotalQuantitySold,
+                AVG(po.sale_price) AS AverageProductPrice,
+                MAX(po.sale_price) AS MaximumProductPrice,
+                SUM(si.price_sold_without_vat) AS TotalRevenue
+            FROM 
+                ProductCategory pc
+            JOIN 
+                Product p ON pc.category_id = p.category_P_id
+            JOIN 
+                ProductOption po ON p.product_id = po.product_PO_id
+            JOIN 
+                SaleItem si ON po.barcode_id = si.barcode_SI_id
+            GROUP BY 
+                pc.category_id, pc.category_name
+            ORDER BY 
+                TotalQuantitySold DESC
+            ''')
+        cursor.execute('''
+            CREATE VIEW SalesDataView AS
+            SELECT 
+                s.sale_date AS SaleDate,
+                p.category_P_id as category_id,
+                SUM(si.quantity_sold) AS TotalQuantity,
+                SUM(si.price_sold_without_vat) AS TotalSales
+            FROM 
+                SaleItem si
+            JOIN Sale s ON si.sale_SI_id = s.sale_id
+            JOIN ProductOption po ON si.barcode_SI_id = po.barcode_id
+            JOIN Product p ON po.product_PO_id = p.product_id
+            GROUP BY 
+                s.sale_date, p.category_P_id
+            ORDER BY 
+                s.sale_date
+            ''')
+
+
+
+#now I am making indexes for performance optimization.
+        cursor.execute('CREATE INDEX idx_productoption_barcode ON ProductOption(barcode_id)')
+        cursor.execute('CREATE INDEX idx_productoption_product ON ProductOption(product_PO_id)')
+        cursor.execute('CREATE INDEX idx_product_category ON Product(category_P_id)')
+        cursor.execute('CREATE INDEX idx_sale_date ON Sale(sale_date)')
+        cursor.execute('CREATE INDEX idx_saleitem_sale ON SaleItem(sale_SI_id)')
+        cursor.execute('CREATE INDEX idx_product_brand ON Product(brand_name)')
+
 
 
 #now I am just inserting some artificial data to store something in my DB.
@@ -148,6 +307,12 @@ def init_db():
 
 #I also did not know about it before as well. lastrowid gives the ID of the last inserted row.
         colors = ['Black','White','Silver', 'Blue', 'Red','Green']
+        cursor.execute('INSERT INTO AttributeName (attribute_name) VALUES (?)', ('Color',))
+        color_attribute_id = cursor.lastrowid
+        color_value_ids = {}
+        for color in colors:
+            cursor.execute('INSERT INTO AttributeValue (attribute_value) VALUES (?)', (color,))
+            color_value_ids[color] = cursor.lastrowid
         for product in products_data:
             cursor.execute('''
                 INSERT INTO Product (model, category_P_id, brand_name)
@@ -160,9 +325,9 @@ def init_db():
             ''', (product_id, product[3], product[4], product[5], product[6]))
             random_color = random.choice(colors)
             cursor.execute('''
-                INSERT INTO ProductAttribute (barcode_PA_id, attribute_id, attribute_name, attribute_value)
-                VALUES (?, ?, ?, ?)
-            ''', (product[3], 1, 'Color', random_color))
+                INSERT INTO ProductAttribute (barcode_PA_id, attribute_name_id, attribute_value_id)
+                VALUES (?, ?, ?)
+            ''', (product[3], color_attribute_id, color_value_ids[random_color]))
             cursor.execute('''
                 INSERT INTO PriceHistory (barcode_PH_id, old_price, new_price,change_date)
                 VALUES (?, ?, ?, datetime('now'))
@@ -194,30 +359,21 @@ def init_db():
         ]
 
 
+
 #here I just make a LOT of data to make graphs look good.
         sales = []
         current_date = datetime.now()
         start_date = current_date - timedelta(days=365) #here chatgpt helped me a bit because I did not know about timedelta
-        for i in range(500): 
+        for i in range(1500): #I changed it from 500 to 1500 as now I use indexes.
             random_days = random.randint(0,365)
             sale_date = start_date + timedelta(days=random_days)
             sale_source= random.choice(['Online', 'Store'])
             promo_code = random.choice(['WELCOME10', None])
             sale_tax_rate = 20
-            total_price_without_vat = random.randint(15000, 200000)
-            vat_paid = total_price_without_vat * sale_tax_rate // 100
-            total_price_with_vat  = total_price_without_vat + vat_paid
-            sales.append((sale_date, sale_source, promo_code, sale_tax_rate, 
-                        total_price_without_vat, vat_paid, total_price_with_vat))
-
-
-
             cursor.execute('''
-                INSERT INTO Sale (sale_date, source_name, code_S_id, tax_rate,
-                                total_price_without_vat, vat_paid, total_price_with_vat)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (sale_date, sale_source, promo_code, sale_tax_rate, 
-                total_price_without_vat, vat_paid, total_price_with_vat))
+                INSERT INTO Sale (sale_date, source_name, code_S_id, tax_rate)
+                VALUES (?, ?, ?, ?)
+            ''', (sale_date, sale_source, promo_code, sale_tax_rate))
             sale_id = cursor.lastrowid
             items_in_sale =  random.sample(sale_items_data, random.randint(1, 10))
             for item in items_in_sale:
