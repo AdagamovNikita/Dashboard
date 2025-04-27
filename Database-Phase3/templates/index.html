@@ -1616,7 +1616,7 @@
                 <h3>Sale Added Successfully!</h3>
                 <p>The sale has been recorded in the system.</p>
                 <div class="confirmation-actions">
-                    <button onclick="showAddSaleForm()" class="action-btn">Add Another Sale</button>
+                    <button onclick="closeSaleConfirmationModal(); showAddSaleForm()" class="action-btn">Add Another Sale</button>
                     <button onclick="closeSaleConfirmationModal()" class="action-btn">Finish</button>
                 </div>
             </div>
@@ -1676,7 +1676,7 @@
                 <h3>Price Updated Successfully!</h3>
                 <p>The product price has been updated in the system.</p>
                 <div class="confirmation-actions">
-                    <button onclick="showChangePriceForm()" class="action-btn">Change Another Price</button>
+                    <button onclick="closePriceConfirmationModal(); showChangePriceForm()" class="action-btn">Change Another Price</button>
                     <button onclick="closePriceConfirmationModal()" class="action-btn">Finish</button>
                 </div>
             </div>
