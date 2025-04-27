@@ -76,8 +76,8 @@
         }
 
         .back-button {
-            background: linear-gradient(165deg, 
-                rgba(11, 28, 72, 0.95), 
+            background: linear-gradient(165deg,
+                rgba(11, 28, 72, 0.95),
                 rgba(33, 150, 243, 0.2)
             );
             border: 1px solid rgba(33, 150, 243, 0.3);
@@ -87,7 +87,7 @@
             text-decoration: none;
             font-size: 1rem;
             cursor: pointer;
-            box-shadow: 
+            box-shadow:
                 0 0 25px rgba(33, 150, 243, 0.2),
                 inset 0 0 20px rgba(33, 150, 243, 0.1);
             text-shadow: 0 0 10px rgba(33, 150, 243, 0.5);
@@ -224,7 +224,7 @@
             .results-table {
                 overflow-x: auto;
             }
-            
+
             table {
                 min-width: 1000px;
             }
@@ -263,8 +263,6 @@
                         <th>Quantity</th>
                         <th>Wholesale Price</th>
                         <th>Sale Price</th>
-                        <th>New Price</th>
-                        <th>Change Date</th>
                         <th>Promo Code</th>
                     </tr>
                 </thead>
@@ -278,8 +276,6 @@
                         <td>{{ result.Quantity }}</td>
                         <td>${{ "%.2f"|format(result.WholesalePrice/100) }}</td>
                         <td>${{ "%.2f"|format(result.SalePrice/100) }}</td>
-                        <td>{{ result.NewPrice }}</td>
-                        <td>{{ result.ChangeDate }}</td>
                         <td>{{ result.PromoCode if result.PromoCode else '-' }}</td>
                     </tr>
                     {% endfor %}

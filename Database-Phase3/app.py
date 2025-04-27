@@ -49,8 +49,6 @@ def search_brand():
                 po.quantity AS Quantity,
                 po.wholesale_price AS WholesalePrice,
                 po.sale_price AS SalePrice,
-                '-' AS NewPrice,
-                '-' AS ChangeDate,
                 MAX(pc.code_id) AS PromoCode
             FROM
                 Product p
@@ -411,7 +409,6 @@ def change_price():
         return jsonify({"error": "Database error"}), 500
     finally:
         conn.close()
-
 
 
 if __name__ == '__main__':
