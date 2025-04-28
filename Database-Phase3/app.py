@@ -1,268 +1,261 @@
 from flask import Flask, render_template, jsonify, request, redirect, url_for
-import sqlite3
+from sqlalchemy import create_engine, func
+from sqlalchemy.orm import sessionmaker
 from datetime import datetime
+from models import Base, Product, ProductCategory, ProductOption, AttributeName, AttributeValue, ProductAttribute, Sale, SaleItem, Supplier, ProductSupplier, PromoCode, PriceHistory
 
 app = Flask(__name__)
 
-def get_db_connection():
+# Database setup
+engine = create_engine('sqlite:///store.db')
+Base.metadata.bind = engine
+DBSession = sessionmaker(bind=engine)
+
+def get_db_session():
     try:
-        conn = sqlite3.connect('store.db')
-        conn.row_factory = sqlite3.Row
-        return conn
-    except Exception:
-        print("Error connecting to database")
+        session = DBSession()
+        return session
+    except Exception as e:
+        print(f"Database connection error: {e}")
         return None
 
 @app.route('/')
 def index():
+    session = get_db_session()
+    if not session:
+        return jsonify({"error": "Sorry, there is a server problem :("})
+
     try:
-        conn = get_db_connection()
-        if not conn:
-            return jsonify({"error": "Sorry, there is a server problem :("})
-        brands = conn.execute('SELECT DISTINCT brand_name FROM Product ORDER BY brand_name').fetchall()
+        brands = session.query(Product.brand_name).distinct().order_by(Product.brand_name).all()
         return render_template('index.html', brands=brands)
     except Exception as e:
         print(f"Error: {e}")
         return jsonify({"error": "Sorry, there is a server problem :("})
     finally:
-        if conn:
-            conn.close()
+        session.close()
 
 @app.route('/search_brand', methods=['POST'])
 def search_brand():
-    try:
-        brand = request.form.get('brand')
-        if not brand:
-            return redirect(url_for('index'))
-        conn = get_db_connection()
-        if not conn:
-            return jsonify({"error": "Sorry, there is a server problem :("})
+    brand = request.form.get('brand')
+    if not brand:
+        return redirect(url_for('index'))
 
-        results = conn.execute('''
-            SELECT
-                p.brand_name AS Brand,
-                p.model AS Model,
-                an.attribute_name AS AttributeName,
-                av.attribute_value AS AttributeValue,
-                po.quantity AS Quantity,
-                po.wholesale_price AS WholesalePrice,
-                po.sale_price AS SalePrice,
-                MAX(pc.code_id) AS PromoCode
-            FROM
-                Product p
-            JOIN
-                ProductOption po ON p.product_id = po.product_PO_id
-            LEFT JOIN
-                ProductAttribute pa ON po.barcode_id = pa.barcode_PA_id
-            LEFT JOIN
-                AttributeName an ON pa.attribute_name_id = an.attribute_name_id
-            LEFT JOIN
-                AttributeValue av ON pa.attribute_value_id = av.attribute_value_id
-            LEFT JOIN
-                SaleItem si ON po.barcode_id = si.barcode_SI_id
-            LEFT JOIN
-                Sale s ON si.sale_SI_id = s.sale_id
-            LEFT JOIN
-                PromoCode pc ON s.code_S_id = pc.code_id
-            WHERE p.brand_name = ?
-            GROUP BY
-                p.brand_name, p.model, an.attribute_name, av.attribute_value,
-                po.quantity, po.wholesale_price, po.sale_price
-            ORDER BY
-                p.brand_name, p.model;
-        ''', (brand,)).fetchall()
+    session = get_db_session()
+    if not session:
+        return jsonify({"error": "Sorry, there is a server problem :("})
+
+    try:
+        results = session.query(
+            Product.brand_name.label('Brand'),
+            Product.model.label('Model'),
+            AttributeName.attribute_name.label('AttributeName'),
+            AttributeValue.attribute_value.label('AttributeValue'),
+            ProductOption.quantity.label('Quantity'),
+            ProductOption.wholesale_price.label('WholesalePrice'),
+            ProductOption.sale_price.label('SalePrice'),
+            func.max(PromoCode.code_id).label('PromoCode')
+        ).join(
+            ProductOption, Product.product_id == ProductOption.product_PO_id
+        ).outerjoin(
+            ProductAttribute, ProductOption.barcode_id == ProductAttribute.barcode_PA_id
+        ).outerjoin(
+            AttributeName, ProductAttribute.attribute_name_id == AttributeName.attribute_name_id
+        ).outerjoin(
+            AttributeValue, ProductAttribute.attribute_value_id == AttributeValue.attribute_value_id
+        ).outerjoin(
+            SaleItem, ProductOption.barcode_id == SaleItem.barcode_SI_id
+        ).outerjoin(
+            Sale, SaleItem.sale_SI_id == Sale.sale_id
+        ).outerjoin(
+            PromoCode, Sale.code_S_id == PromoCode.code_id
+        ).filter(
+            Product.brand_name == brand
+        ).group_by(
+            Product.brand_name, Product.model,
+            AttributeName.attribute_name, AttributeValue.attribute_value,
+            ProductOption.quantity, ProductOption.wholesale_price, ProductOption.sale_price
+        ).order_by(
+            Product.brand_name, Product.model
+        ).all()
 
         return render_template('search_results.html', results=results, brand=brand)
     except Exception as e:
         print(f"Error: {e}")
         return jsonify({"error": "Sorry, there is a server problem :("})
     finally:
-        if conn:
-            conn.close()
+        session.close()
 
 @app.route('/api/top_products')
 def top_products():
+    session = get_db_session()
+    if not session:
+        return jsonify({"error": "Sorry, there is a server problem :("})
+
     try:
-        conn = get_db_connection()
-        if not conn:
-            return jsonify({"error": "Sorry, there is a server problem :("})
+        # This query matches the SQL version exactly
+        products = session.query(
+            Product.brand_name.label('Brand'),
+            Product.model.label('Model'),
+            func.sum(SaleItem.quantity_sold).label('TotalQuantitySold')
+        ).select_from(SaleItem).join(
+            ProductOption, SaleItem.barcode_SI_id == ProductOption.barcode_id
+        ).join(
+            Product, ProductOption.product_PO_id == Product.product_id
+        ).group_by(
+            Product.product_id, Product.brand_name, Product.model
+        ).order_by(
+            func.sum(SaleItem.quantity_sold).desc()
+        ).limit(5).all()
 
-        products = conn.execute('''
-            SELECT
-                p.brand_name AS Brand,
-                p.model AS Model,
-                SUM(si.quantity_sold) AS TotalQuantitySold
-            FROM
-                SaleItem si
-            JOIN
-                ProductOption po ON si.barcode_SI_id = po.barcode_id
-            JOIN
-                Product p ON po.product_PO_id = p.product_id
-            GROUP BY
-                p.product_id, p.brand_name, p.model
-            ORDER BY
-                TotalQuantitySold DESC
-            LIMIT 5
-        ''').fetchall()
+        # This profit calculation matches the SQL version exactly
+        profit = session.query(
+            func.sum((ProductOption.sale_price - ProductOption.wholesale_price) * SaleItem.quantity_sold).label('profit')
+        ).select_from(SaleItem).join(
+            ProductOption, SaleItem.barcode_SI_id == ProductOption.barcode_id
+        ).first()
 
-        profit = conn.execute('''
-            SELECT
-                SUM((po.sale_price - po.wholesale_price) * si.quantity_sold) AS profit
-            FROM
-                SaleItem si
-            JOIN
-                ProductOption po ON si.barcode_SI_id = po.barcode_id
-        ''').fetchone()
+        # Debug print to see what's happening
+        print(f"Products found: {len(products)}")
+        for p in products:
+            print(f"Product: {p.Brand} {p.Model}, Quantity: {p.TotalQuantitySold}")
+        print(f"Profit: {profit[0] if profit[0] else 0}")
 
         return jsonify({
             'products': [dict(row) for row in products],
-            'profit': profit['profit'] / 100
+            'profit': profit[0] / 100 if profit[0] else 0
         })
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Error in top_products: {e}")
         return jsonify({"error": "Sorry, there is a server problem :("})
     finally:
-        if conn:
-            conn.close()
+        session.close()
 
 @app.route('/api/top_categories')
 def top_categories():
+    session = get_db_session()
+    if not session:
+        return jsonify({"error": "Sorry, there is a server problem :("})
+
     try:
-        conn = get_db_connection()
-        if not conn:
-            return jsonify({"error": "Sorry, there is a server problem :("})
+        # Top 5 categories by quantity sold
+        categories = session.query(
+            ProductCategory.category_name.label('Category'),
+            func.count(Product.product_id).label('NumberOfProducts'),
+            func.sum(SaleItem.quantity_sold).label('TotalQuantitySold')
+        ).join(
+            Product, ProductCategory.category_id == Product.category_P_id
+        ).join(
+            ProductOption, Product.product_id == ProductOption.product_PO_id
+        ).join(
+            SaleItem, ProductOption.barcode_id == SaleItem.barcode_SI_id
+        ).group_by(
+            ProductCategory.category_id, ProductCategory.category_name
+        ).order_by(
+            func.sum(SaleItem.quantity_sold).desc()
+        ).limit(5).all()
 
-        categories = conn.execute('''
-            SELECT
-                pc.category_name AS Category,
-                COUNT(p.product_id) AS NumberOfProducts,
-                SUM(si.quantity_sold) AS TotalQuantitySold
-            FROM
-                ProductCategory pc
-            JOIN
-                Product p ON pc.category_id = p.category_P_id
-            JOIN
-                ProductOption po ON p.product_id = po.product_PO_id
-            JOIN
-                SaleItem si ON po.barcode_id = si.barcode_SI_id
-            GROUP BY
-                pc.category_id, pc.category_name
-            ORDER BY
-                TotalQuantitySold DESC
-            LIMIT 5
-        ''').fetchall()
-
-        revenue = conn.execute('''
-            SELECT
-                SUM(po.sale_price * si.quantity_sold) AS revenue
-            FROM
-                SaleItem si
-            JOIN
-                ProductOption po ON si.barcode_SI_id = po.barcode_id
-        ''').fetchone()
+        # Total revenue calculation
+        revenue = session.query(
+            func.sum(ProductOption.sale_price * SaleItem.quantity_sold).label('revenue')
+        ).join(
+            SaleItem, SaleItem.barcode_SI_id == ProductOption.barcode_id
+        ).first()
 
         return jsonify({
             'categories': [dict(row) for row in categories],
-            'revenue': revenue['revenue'] / 100
+            'revenue': revenue[0] / 100 if revenue[0] else 0
         })
     except Exception as e:
         print(f"Error: {e}")
         return jsonify({"error": "Sorry, there is a server problem :("})
     finally:
-        if conn:
-            conn.close()
+        session.close()
 
 @app.route('/api/product_details')
 def product_details():
-    try:
-        conn = get_db_connection()
-        if not conn:
-            return jsonify({"error": "Sorry, there is a server problem :("})
+    session = get_db_session()
+    if not session:
+        return jsonify({"error": "Sorry, there is a server problem :("})
 
-        products = conn.execute('''
-            SELECT
-                p.brand_name AS Brand,
-                p.model AS Model,
-                po.sale_price AS SalePrice,
-                SUM(si.quantity_sold) AS TotalQuantitySold,
-                ((po.sale_price - po.wholesale_price) * 100.0 / po.sale_price) AS MarginPercentage,
-                s.supplier_name AS SupplierName,
-                s.phone_number AS Phone,
-                s.address AS Address
-            FROM
-                SaleItem si
-            JOIN
-                ProductOption po ON si.barcode_SI_id = po.barcode_id
-            JOIN
-                Product p ON po.product_PO_id = p.product_id
-            JOIN
-                ProductSupplier ps ON p.product_id = ps.product_PS_id
-            JOIN
-                Supplier s ON ps.supplier_PS_id = s.supplier_id
-            GROUP BY
-                p.product_id, p.brand_name, p.model, po.sale_price, po.wholesale_price,
-                s.supplier_name, s.phone_number, s.address
-            ORDER BY
-                TotalQuantitySold DESC
-        ''').fetchall()
+    try:
+        products = session.query(
+            Product.brand_name.label('Brand'),
+            Product.model.label('Model'),
+            ProductOption.sale_price.label('SalePrice'),
+            func.sum(SaleItem.quantity_sold).label('TotalQuantitySold'),
+            ((ProductOption.sale_price - ProductOption.wholesale_price) * 100.0 / ProductOption.sale_price).label('MarginPercentage'),
+            Supplier.supplier_name.label('SupplierName'),
+            Supplier.phone_number.label('Phone'),
+            Supplier.address.label('Address')
+        ).join(
+            ProductOption, Product.product_id == ProductOption.product_PO_id
+        ).join(
+            SaleItem, ProductOption.barcode_id == SaleItem.barcode_SI_id
+        ).join(
+            ProductSupplier, Product.product_id == ProductSupplier.product_PS_id
+        ).join(
+            Supplier, ProductSupplier.supplier_PS_id == Supplier.supplier_id
+        ).group_by(
+            Product.product_id, Product.brand_name, Product.model,
+            ProductOption.sale_price, ProductOption.wholesale_price,
+            Supplier.supplier_name, Supplier.phone_number, Supplier.address
+        ).order_by(
+            func.sum(SaleItem.quantity_sold).desc()
+        ).all()
 
         return jsonify([dict(row) for row in products])
     except Exception as e:
         print(f"Error: {e}")
         return jsonify({"error": "Sorry, there is a server problem :("})
     finally:
-        if conn:
-            conn.close()
+        session.close()
 
 @app.route('/api/category_details')
 def category_details():
-    try:
-        conn = get_db_connection()
-        if not conn:
-            return jsonify({"error": "Sorry, there is a server problem :("})
+    session = get_db_session()
+    if not session:
+        return jsonify({"error": "Sorry, there is a server problem :("})
 
-        categories = conn.execute('''
-            SELECT
-                pc.category_name AS Category,
-                COUNT(p.product_id) AS NumberOfProducts,
-                SUM(si.quantity_sold) AS TotalQuantitySold,
-                AVG(po.sale_price) AS AverageProductPrice,
-                MAX(po.sale_price) AS MaximumProductPrice,
-                SUM(si.price_sold_without_vat) AS TotalRevenue
-            FROM
-                ProductCategory pc
-            JOIN
-                Product p ON pc.category_id = p.category_P_id
-            JOIN
-                ProductOption po ON p.product_id = po.product_PO_id
-            JOIN
-                SaleItem si ON po.barcode_id = si.barcode_SI_id
-            GROUP BY
-                pc.category_id, pc.category_name
-            ORDER BY
-                TotalQuantitySold DESC
-        ''').fetchall()
+    try:
+        categories = session.query(
+            ProductCategory.category_name.label('Category'),
+            func.count(Product.product_id).label('NumberOfProducts'),
+            func.sum(SaleItem.quantity_sold).label('TotalQuantitySold'),
+            func.avg(ProductOption.sale_price).label('AverageProductPrice'),
+            func.max(ProductOption.sale_price).label('MaximumProductPrice'),
+            func.sum(SaleItem.price_sold_without_vat).label('TotalRevenue')
+        ).join(
+            Product, ProductCategory.category_id == Product.category_P_id
+        ).join(
+            ProductOption, Product.product_id == ProductOption.product_PO_id
+        ).join(
+            SaleItem, ProductOption.barcode_id == SaleItem.barcode_SI_id
+        ).group_by(
+            ProductCategory.category_id, ProductCategory.category_name
+        ).order_by(
+            func.sum(SaleItem.quantity_sold).desc()
+        ).all()
 
         return jsonify([dict(row) for row in categories])
     except Exception as e:
         print(f"Error: {e}")
         return jsonify({"error": "Sorry, there is a server problem :("})
     finally:
-        if conn:
-            conn.close()
+        session.close()
 
 @app.route('/api/chart-filters')
 def get_chart_filters():
-    try:
-        conn = get_db_connection()
-        if not conn:
-            return jsonify({"error": "Sorry, there is a server problem :("})
+    session = get_db_session()
+    if not session:
+        return jsonify({"error": "Sorry, there is a server problem :("})
 
-        categories = conn.execute('''
-            SELECT category_id, category_name
-            FROM ProductCategory
-            ORDER BY category_name
-        ''').fetchall()
+    try:
+        categories = session.query(
+            ProductCategory.category_id,
+            ProductCategory.category_name
+        ).order_by(
+            ProductCategory.category_name
+        ).all()
 
         return jsonify({
             'categories': [dict(row) for row in categories]
@@ -271,149 +264,157 @@ def get_chart_filters():
         print(f"Error: {e}")
         return jsonify({"error": "Sorry, there is a server problem :("})
     finally:
-        if conn:
-            conn.close()
+        session.close()
 
 @app.route('/api/sales-data', methods=['POST'])
 def get_sales_data():
+    category_id = request.form.get('category_id')
+    if not category_id:
+        return jsonify({"error": "Category is required"})
+
+    session = get_db_session()
+    if not session:
+        return jsonify({"error": "Sorry, there is a server problem :("})
+
     try:
-        category_id = request.form.get('category_id')
-        if not category_id:
-            return jsonify({"error": "Category is required"})
-
-        conn = get_db_connection()
-        if not conn:
-            return jsonify({"error": "Sorry, there is a server problem :("})
-
-        results = conn.execute('''
-            SELECT
-                s.sale_date AS SaleDate,
-                p.category_P_id as category_id,
-                SUM(si.quantity_sold) AS TotalQuantity,
-                SUM(si.price_sold_without_vat) AS TotalSales
-            FROM
-                SaleItem si
-            JOIN Sale s ON si.sale_SI_id = s.sale_id
-            JOIN ProductOption po ON si.barcode_SI_id = po.barcode_id
-            JOIN Product p ON po.product_PO_id = p.product_id
-            WHERE p.category_P_id = ?
-            GROUP BY
-                s.sale_date, p.category_P_id
-            ORDER BY
-                s.sale_date
-        ''', (category_id,)).fetchall()
+        results = session.query(
+            Sale.sale_date.label('SaleDate'),
+            Product.category_P_id.label('category_id'),
+            func.sum(SaleItem.quantity_sold).label('TotalQuantity'),
+            func.sum(SaleItem.price_sold_without_vat).label('TotalSales')
+        ).join(
+            SaleItem, SaleItem.sale_SI_id == Sale.sale_id
+        ).join(
+            ProductOption, SaleItem.barcode_SI_id == ProductOption.barcode_id
+        ).join(
+            Product, ProductOption.product_PO_id == Product.product_id
+        ).filter(
+            Product.category_P_id == category_id
+        ).group_by(
+            Sale.sale_date, Product.category_P_id
+        ).order_by(
+            Sale.sale_date
+        ).all()
 
         return jsonify([{
-            'date': row['SaleDate'],
-            'quantity': row['TotalQuantity'],
-            'sales': row['TotalSales'] / 100
+            'date': row.SaleDate,
+            'quantity': row.TotalQuantity,
+            'sales': row.TotalSales / 100
         } for row in results])
     except Exception as e:
         print(f"Error: {e}")
         return jsonify({"error": "Sorry, there is a server problem :("})
     finally:
-        if conn:
-            conn.close()
-
-
+        session.close()
 
 @app.route('/add_sale', methods=['POST'])
 def add_sale():
     brand = request.form.get('brand')
     model = request.form.get('model')
     quantity_str = request.form.get('quantity')
+
     if not brand or not model or not quantity_str:
         return jsonify({"error": "Please fill in all required fields"})
     if not quantity_str.isdigit():
         return jsonify({"error": "Quantity must be a number"})
+
     quantity = int(quantity_str)
-    conn = None
+    session = get_db_session()
+    if not session:
+        return jsonify({"error": "Sorry, there is a server problem :("})
+
     try:
-        conn = sqlite3.connect('store.db')
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        cursor.execute('''
-            SELECT po.barcode_id, po.quantity, po.sale_price
-            FROM Product p
-            JOIN ProductOption po ON p.product_id = po.product_PO_id
-            WHERE p.brand_name = ? AND p.model = ?
-        ''', (brand, model))
-        product = cursor.fetchone()
-        if not product:
+        # Find the product option
+        product_option = session.query(ProductOption).join(
+            Product, Product.product_id == ProductOption.product_PO_id
+        ).filter(
+            Product.brand_name == brand,
+            Product.model == model
+        ).first()
+
+        if not product_option:
             return jsonify({"error": "Product not found"})
-        if product['quantity'] < quantity:
+        if product_option.quantity < quantity:
             return jsonify({"error": "Not enough stock"})
-        cursor.execute('''
-            UPDATE ProductOption
-            SET quantity = quantity - ?
-            WHERE barcode_id = ?
-        ''', (quantity, product['barcode_id']))
-        cursor.execute('''
-            INSERT INTO Sale (sale_date, source_name, tax_rate)
-            VALUES (datetime('now'), 'Manual Entry', 20)
-        ''')
-        sale_id = cursor.lastrowid
-        cursor.execute('''
-            INSERT INTO SaleItem (sale_SI_id, barcode_SI_id, quantity_sold, price_sold_without_vat)
-            VALUES (?, ?, ?, ?)
-        ''', (sale_id, product['barcode_id'], quantity, product['sale_price']))
-        conn.commit()
+
+        # Update inventory
+        product_option.quantity -= quantity
+
+        # Create new sale
+        new_sale = Sale(
+            sale_date=datetime.now(),
+            source_name='Manual Entry',
+            tax_rate=20
+        )
+        session.add(new_sale)
+        session.flush()  # To get the sale_id
+
+        # Create sale item
+        new_sale_item = SaleItem(
+            sale_SI_id=new_sale.sale_id,
+            barcode_SI_id=product_option.barcode_id,
+            quantity_sold=quantity,
+            price_sold_without_vat=product_option.sale_price
+        )
+        session.add(new_sale_item)
+
+        session.commit()
         return jsonify({"success": "Sale recorded successfully"})
     except Exception as e:
-        if conn:
-            conn.rollback()
+        session.rollback()
         print(f"Error: {e}")
         return jsonify({"error": "Sorry, there is a server problem :("})
     finally:
-        if conn:
-            conn.close()
-
-
+        session.close()
 
 @app.route('/change_price', methods=['POST'])
 def change_price():
     brand = request.form.get('brand')
     model = request.form.get('model')
     new_price_str = request.form.get('new_price')
+
     if not brand or not model or not new_price_str:
         return jsonify({"error": "Please fill in all required fields"})
     if not new_price_str.isdigit():
         return jsonify({"error": "Price must be a number"})
+
     new_price = int(new_price_str)
-    conn = None
+    session = get_db_session()
+    if not session:
+        return jsonify({"error": "Sorry, there is a server problem :("})
+
     try:
-        conn = sqlite3.connect('store.db')
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        cursor.execute('''
-            SELECT po.barcode_id, po.sale_price
-            FROM Product p
-            JOIN ProductOption po ON p.product_id = po.product_PO_id
-            WHERE p.brand_name = ? AND p.model = ?
-        ''', (brand, model))
-        product = cursor.fetchone()
-        if not product:
+        # Find the product option
+        product_option = session.query(ProductOption).join(
+            Product, Product.product_id == ProductOption.product_PO_id
+        ).filter(
+            Product.brand_name == brand,
+            Product.model == model
+        ).first()
+
+        if not product_option:
             return jsonify({"error": "Product not found"})
-        cursor.execute('''
-            UPDATE ProductOption
-            SET sale_price = ?
-            WHERE barcode_id = ?
-        ''', (new_price, product['barcode_id']))
-        cursor.execute('''
-            INSERT INTO PriceHistory (barcode_PH_id, old_price, new_price, change_date)
-            VALUES (?, ?, ?, datetime('now'))
-        ''', (product['barcode_id'], product['sale_price'], new_price))
-        conn.commit()
+
+        # Record price history before updating
+        price_history = PriceHistory(
+            barcode_PH_id=product_option.barcode_id,
+            old_price=product_option.sale_price,
+            new_price=new_price,
+            change_date=datetime.now()
+        )
+        session.add(price_history)
+
+        # Update the price
+        product_option.sale_price = new_price
+
+        session.commit()
         return jsonify({"success": "Price updated successfully"})
     except Exception as e:
-        if conn:
-            conn.rollback()
+        session.rollback()
         print(f"Error: {e}")
         return jsonify({"error": "Sorry, there is a server problem :("})
     finally:
-        if conn:
-            conn.close()
-
+        session.close()
 
 if __name__ == '__main__':
     app.run(debug=True)

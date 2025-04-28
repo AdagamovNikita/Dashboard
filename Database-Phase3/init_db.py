@@ -1,139 +1,156 @@
-import sqlite3
+from sqlalchemy import create_engine, Column, Integer, String, Float, Date, DateTime, ForeignKey, func
+from sqlalchemy.orm import declarative_base, relationship, sessionmaker
+from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime, timedelta
 import random
 import time
-random.seed(time.time()) #I need it to set different colors for items in my database.
 
-#these are all the tables I created while looking at my database schema from phase 1.
+random.seed(time.time())
+
+Base = declarative_base()
+
+# Модели таблиц
+class ProductCategory(Base):
+    __tablename__ = 'ProductCategory'
+    category_id = Column(Integer, primary_key=True)
+    category_name = Column(String, nullable=False)
+    products = relationship('Product', back_populates='category')
+
+class Product(Base):
+    __tablename__ = 'Product'
+    product_id = Column(Integer, primary_key=True)
+    model = Column(String, nullable=False)
+    category_P_id = Column(Integer, ForeignKey('ProductCategory.category_id'))
+    brand_name = Column(String)
+    category = relationship('ProductCategory', back_populates='products')
+    options = relationship('ProductOption', back_populates='product')
+    suppliers = relationship('ProductSupplier', back_populates='product')
+
+class ProductOption(Base):
+    __tablename__ = 'ProductOption'
+    barcode_id = Column(String, primary_key=True)
+    product_PO_id = Column(Integer, ForeignKey('Product.product_id'))
+    quantity = Column(Integer, nullable=False)
+    wholesale_price = Column(Integer, nullable=False)
+    sale_price = Column(Integer, nullable=False)
+    product = relationship('Product', back_populates='options')
+    attributes = relationship('ProductAttribute', back_populates='product_option')
+    price_history = relationship('PriceHistory', back_populates='product_option')
+    sale_items = relationship('SaleItem', back_populates='product_option')
+
+class AttributeName(Base):
+    __tablename__ = 'AttributeName'
+    attribute_name_id = Column(Integer, primary_key=True)
+    attribute_name = Column(String, nullable=False, unique=True)
+    attributes = relationship('ProductAttribute', back_populates='attribute_name')
+
+class AttributeValue(Base):
+    __tablename__ = 'AttributeValue'
+    attribute_value_id = Column(Integer, primary_key=True)
+    attribute_value = Column(String, nullable=False, unique=True)
+    attributes = relationship('ProductAttribute', back_populates='attribute_value')
+
+class ProductAttribute(Base):
+    __tablename__ = 'ProductAttribute'
+    barcode_PA_id = Column(String, ForeignKey('ProductOption.barcode_id'), primary_key=True)
+    attribute_name_id = Column(Integer, ForeignKey('AttributeName.attribute_name_id'), primary_key=True)
+    attribute_value_id = Column(Integer, ForeignKey('AttributeValue.attribute_value_id'), primary_key=True)
+    product_option = relationship('ProductOption', back_populates='attributes')
+    attribute_name = relationship('AttributeName', back_populates='attributes')
+    attribute_value = relationship('AttributeValue', back_populates='attributes')
+
+class PriceHistory(Base):
+    __tablename__ = 'PriceHistory'
+    price_id = Column(Integer, primary_key=True)
+    barcode_PH_id = Column(String, ForeignKey('ProductOption.barcode_id'))
+    old_price = Column(Integer, nullable=False)
+    new_price = Column(Integer, nullable=False)
+    change_date = Column(DateTime, nullable=False)
+    product_option = relationship('ProductOption', back_populates='price_history')
+
+class Supplier(Base):
+    __tablename__ = 'Supplier'
+    supplier_id = Column(Integer, primary_key=True)
+    supplier_name = Column(String, nullable=False)
+    phone_number = Column(String)
+    address = Column(String)
+    products = relationship('ProductSupplier', back_populates='supplier')
+
+class ProductSupplier(Base):
+    __tablename__ = 'ProductSupplier'
+    product_PS_id = Column(Integer, ForeignKey('Product.product_id'), primary_key=True)
+    supplier_PS_id = Column(Integer, ForeignKey('Supplier.supplier_id'), primary_key=True)
+    product = relationship('Product', back_populates='suppliers')
+    supplier = relationship('Supplier', back_populates='products')
+class PromoCode(Base):
+    __tablename__ = 'PromoCode'
+    code_id = Column(String, primary_key=True)
+    discount_percentage = Column(Integer, nullable=False)
+    valid_from = Column(Date, nullable=False)
+    valid_to = Column(Date, nullable=False)
+    sales = relationship('Sale', back_populates='promo_code')
+
+class Sale(Base):
+    __tablename__ = 'Sale'
+    sale_id = Column(Integer, primary_key=True)
+    sale_date = Column(DateTime, nullable=False)
+    source_name = Column(String)
+    code_S_id = Column(String, ForeignKey('PromoCode.code_id'))
+    tax_rate = Column(Integer)
+    promo_code = relationship('PromoCode', back_populates='sales')
+    items = relationship('SaleItem', back_populates='sale')
+
+class SaleItem(Base):
+    __tablename__ = 'SaleItem'
+    sale_item_id = Column(Integer, primary_key=True)
+    sale_SI_id = Column(Integer, ForeignKey('Sale.sale_id'))
+    barcode_SI_id = Column(String, ForeignKey('ProductOption.barcode_id'), nullable=False)
+    quantity_sold = Column(Integer, nullable=False)
+    price_sold_without_vat = Column(Integer, nullable=False)
+    sale = relationship('Sale', back_populates='items')
+    product_option = relationship('ProductOption', back_populates='sale_items')
+
+# Создаем движок и таблицы
+engine = create_engine('sqlite:///store.db')
+Base.metadata.create_all(engine)
+Session = sessionmaker(bind=engine)
+
 def init_db():
+    session = Session()
     try:
-        conn = sqlite3.connect('store.db')
-        cursor= conn.cursor()
-        cursor.executescript('''
-            CREATE TABLE Product (
-                product_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                model TEXT NOT NULL,
-                category_P_id INTEGER,
-                brand_name TEXT,
-                FOREIGN KEY (category_P_id) REFERENCES ProductCategory(category_id)
-            ); 
-            CREATE TABLE ProductCategory (
-                category_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                category_name TEXT NOT NULL
-            ); 
-            CREATE TABLE ProductOption (
-                barcode_id TEXT PRIMARY KEY,
-                product_PO_id INTEGER,
-                quantity INTEGER NOT NULL,
-                wholesale_price INTEGER NOT NULL,
-                sale_price INTEGER NOT NULL,
-                FOREIGN KEY (product_PO_id) REFERENCES Product(product_id)
-            ); 
-            CREATE TABLE AttributeName (
-                attribute_name_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                attribute_name TEXT NOT NULL UNIQUE
-            ); 
-            CREATE TABLE AttributeValue (
-                attribute_value_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                attribute_value TEXT NOT NULL UNIQUE
-            ); 
-            CREATE TABLE ProductAttribute (
-                barcode_PA_id TEXT,
-                attribute_name_id INTEGER,
-                attribute_value_id INTEGER,
-                PRIMARY KEY (barcode_PA_id, attribute_name_id, attribute_value_id),
-                FOREIGN KEY (barcode_PA_id) REFERENCES ProductOption(barcode_id),
-                FOREIGN KEY (attribute_name_id) REFERENCES AttributeName(attribute_name_id),
-                FOREIGN KEY (attribute_value_id) REFERENCES AttributeValue(attribute_value_id)
-            ); 
-            CREATE TABLE PriceHistory (
-                barcode_PH_id TEXT,
-                price_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                old_price INTEGER NOT NULL,
-                new_price INTEGER NOT NULL,
-                change_date DATETIME NOT NULL,
-                FOREIGN KEY (barcode_PH_id) REFERENCES ProductOption(barcode_id)
-            ); 
-            CREATE TABLE Supplier (
-                supplier_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                supplier_name TEXT NOT NULL,
-                phone_number TEXT,
-                address TEXT
-            ); 
-            CREATE TABLE ProductSupplier (
-                product_PS_id INTEGER,
-                supplier_PS_id INTEGER,
-                PRIMARY KEY (product_PS_id, supplier_PS_id),
-                FOREIGN KEY (product_PS_id) REFERENCES Product(product_id),
-                FOREIGN KEY (supplier_PS_id) REFERENCES Supplier(supplier_id)
-            ); 
-            CREATE TABLE PromoCode (
-                code_id TEXT PRIMARY KEY,
-                discount_percentage INTEGER NOT NULL,
-                valid_from DATE NOT NULL,
-                valid_to DATE NOT NULL
-            ); 
-            CREATE TABLE Sale (
-                sale_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                sale_date DATETIME NOT NULL,
-                source_name TEXT,
-                code_S_id TEXT,
-                tax_rate INTEGER,
-                FOREIGN KEY (code_S_id) REFERENCES PromoCode(code_id)
-            ); 
-            CREATE TABLE SaleItem (
-                sale_SI_id INTEGER,
-                sale_item_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                barcode_SI_id TEXT NOT NULL,
-                quantity_sold INTEGER NOT NULL,
-                price_sold_without_vat INTEGER NOT NULL,
-                FOREIGN KEY (sale_SI_id) REFERENCES Sale(sale_id),
-                FOREIGN KEY (barcode_SI_id) REFERENCES ProductOption(barcode_id)
-            );
-        ''')
+        # Добавляем категории
+        categories = ['Smartphones', 'Laptops', 'Tablets', 'Smartwatches', 'Accessories']
+        for cat_name in categories:
+            session.add(ProductCategory(category_name=cat_name))
+        session.commit()
 
-
-
-#now I am making indexes for performance optimization.
-        cursor.execute('CREATE INDEX idx_productoption_barcode ON ProductOption(barcode_id)')
-        cursor.execute('CREATE INDEX idx_productoption_product ON ProductOption(product_PO_id)')
-        cursor.execute('CREATE INDEX idx_product_category ON Product(category_P_id)')
-        cursor.execute('CREATE INDEX idx_sale_date ON Sale(sale_date)')
-        cursor.execute('CREATE INDEX idx_saleitem_sale ON SaleItem(sale_SI_id)')
-        cursor.execute('CREATE INDEX idx_product_brand ON Product(brand_name)')
-
-
-
-#now I am just inserting some artificial data to store something in my DB.
-        categories = [
-            ('Smartphones',),
-            ('Laptops',),
-            ('Tablets',),
-            ('Smartwatches',),
-            ('Accessories',)
-        ]
-        cursor.executemany('INSERT INTO ProductCategory (category_name) VALUES (?)', categories)
-
-
-
+        # Добавляем поставщиков
         suppliers = [
-            ('TechGlobal Inc.', '+1-555-0123', '123 Tech Street, Silicon Valley, CA'),
-            ('Global Electronics', '+1-555-0124', '456 Electronics Ave, New York, NY'),
-            ('Digital Solutions', '+1-555-0125', '789 Digital Road, Seattle, WA'),
-            ('Smart Devices Co.', '+1-555-0126', '321 Smart Blvd, Austin, TX'),
-            ('Future Tech Ltd.', '+1-555-0127', '654 Future Lane, Boston, MA')
+            Supplier(supplier_name='TechGlobal Inc.', phone_number='+1-555-0123',
+                    address='123 Tech Street, Silicon Valley, CA'),
+            Supplier(supplier_name='Global Electronics', phone_number='+1-555-0124',
+                    address='456 Electronics Ave, New York, NY'),
+            Supplier(supplier_name='Digital Solutions', phone_number='+1-555-0125',
+                    address='789 Digital Road, Seattle, WA'),
+            Supplier(supplier_name='Smart Devices Co.', phone_number='+1-555-0126',
+                    address='321 Smart Blvd, Austin, TX'),
+            Supplier(supplier_name='Future Tech Ltd.', phone_number='+1-555-0127',
+                    address='654 Future Lane, Boston, MA')
         ]
-        cursor.executemany('INSERT INTO Supplier (supplier_name, phone_number, address) VALUES (?, ?, ?)', suppliers)
+        session.add_all(suppliers)
+        session.commit()
 
+        # Добавляем промокод
+        promo_code = PromoCode(
+            code_id='WELCOME10',
+            discount_percentage=10,
+            valid_from=datetime(2024, 1, 1).date(),
+            valid_to=datetime(2024, 12, 31).date()
+        )
+        session.add(promo_code)
+        session.commit()
 
-
-        promo_codes = [
-            ('WELCOME10', 10, '2024-01-01','2024-12-31')
-        ]
-        cursor.executemany('INSERT INTO PromoCode (code_id, discount_percentage, valid_from, valid_to) VALUES (?, ?, ?, ?)', promo_codes)
-
-
-
+        # Добавляем продукты
         products_data = [
             ('iPhone 15 Pro', 1, 'Apple', 'APP15P-256', 50, 80000, 99900),
             ('iPhone 15', 1, 'Apple', 'APP15-128', 75, 60000, 79900),
@@ -162,96 +179,123 @@ def init_db():
             ('IdeaPad 5', 2, 'Lenovo', 'LEN-IDEA5', 60, 60000, 79900)
         ]
 
+        # Добавляем атрибуты цвета
+        color_attr = AttributeName(attribute_name='Color')
+        session.add(color_attr)
+        session.commit()
 
-#I also did not know about it before as well. lastrowid gives the ID of the last inserted row.
-        colors = ['Black','White','Silver', 'Blue', 'Red','Green']
-        cursor.execute('INSERT INTO AttributeName (attribute_name) VALUES (?)', ('Color',))
-        color_attribute_id = cursor.lastrowid
-        color_value_ids = {}
+        colors = ['Black', 'White', 'Silver', 'Blue', 'Red', 'Green']
+        color_values = {}
         for color in colors:
-            cursor.execute('INSERT INTO AttributeValue (attribute_value) VALUES (?)', (color,))
-            color_value_ids[color] = cursor.lastrowid
+            color_value = AttributeValue(attribute_value=color)
+            session.add(color_value)
+            session.commit()
+            color_values[color] = color_value.attribute_value_id
+# Добавляем продукты и их опции
         for product in products_data:
-            cursor.execute('''
-                INSERT INTO Product (model, category_P_id, brand_name)
-                VALUES (?, ?, ?)
-            ''', (product[0], product[1], product[2]))
-            product_id = cursor.lastrowid
-            cursor.execute('''
-                INSERT INTO ProductOption (product_PO_id,barcode_id, quantity, wholesale_price, sale_price)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (product_id, product[3], product[4], product[5], product[6]))
+            # Создаем продукт
+            new_product = Product(
+                model=product[0],
+                category_P_id=product[1],
+                brand_name=product[2]
+            )
+            session.add(new_product)
+            session.commit()
+
+            # Создаем опцию продукта
+            product_option = ProductOption(
+                barcode_id=product[3],
+                product_PO_id=new_product.product_id,
+                quantity=product[4],
+                wholesale_price=product[5],
+                sale_price=product[6]
+            )
+            session.add(product_option)
+            session.commit()
+
+            # Добавляем цвет
             random_color = random.choice(colors)
-            cursor.execute('''
-                INSERT INTO ProductAttribute (barcode_PA_id, attribute_name_id, attribute_value_id)
-                VALUES (?, ?, ?)
-            ''', (product[3], color_attribute_id, color_value_ids[random_color]))
-            cursor.execute('''
-                INSERT INTO PriceHistory (barcode_PH_id, old_price, new_price,change_date)
-                VALUES (?, ?, ?, datetime('now'))
-            ''', (product[3], product[5], product[6]))
-            cursor.execute(''' 
-                INSERT INTO ProductSupplier (product_PS_id,supplier_PS_id)
-                VALUES (?, ?)
-            ''', (product_id, random.randint(1, 5)))
+            product_attr = ProductAttribute(
+                barcode_PA_id=product_option.barcode_id,
+                attribute_name_id=color_attr.attribute_name_id,
+                attribute_value_id=color_values[random_color]
+            )
+            session.add(product_attr)
 
+            # Добавляем историю цен
+            price_history = PriceHistory(
+                barcode_PH_id=product_option.barcode_id,
+                old_price=product[5],
+                new_price=product[6],
+                change_date=datetime.now()
+            )
+            session.add(price_history)
 
+            # Добавляем поставщика
+            product_supplier = ProductSupplier(
+                product_PS_id=new_product.product_id,
+                supplier_PS_id=random.randint(1, 5)
+            )
+            session.add(product_supplier)
 
+        session.commit()
+
+        # Добавляем продажи
         sale_items_data = [
-           ('APP15P-256', 1, 10, 99900),
-            ('APP15-128', 1, 12, 79900),
-            ('SAM-S24U', 1, 8, 89900),
-            ('SON-XP1V', 1, 6, 94900),
-            ('APP-MBP16', 1, 5, 199900),
-            ('DEL-XPS15', 1, 7, 179900),
-            ('LEN-X1C', 1, 6, 149900),
-            ('SAM-BOOK4', 1, 4, 149900),
-            ('APP-IPAD12', 1, 8, 99900),
-            ('SAM-TABS9', 1, 10, 79900),
-            ('LEN-TABP12', 1, 7, 84900),
-            ('APP-WATCH9', 1, 15, 39900),
-            ('SAM-WATCH6', 1, 12, 29900),
-            ('SAM-BUDSP', 1, 20, 19900),
-            ('SON-WH1000', 1, 18, 29900),
-            ('SON-WF1000', 1, 25, 19900)
+            ('APP15P-256', 99900),
+            ('APP15-128', 79900),
+            ('SAM-S24U', 89900),
+            ('SON-XP1V', 94900),
+            ('APP-MBP16', 199900),
+            ('DEL-XPS15', 179900),
+            ('LEN-X1C', 149900),
+            ('SAM-BOOK4', 149900),
+            ('APP-IPAD12', 99900),
+            ('SAM-TABS9', 79900),
+            ('LEN-TABP12', 84900),
+            ('APP-WATCH9', 39900),
+            ('SAM-WATCH6', 29900),
+            ('SAM-BUDSP', 19900),
+            ('SON-WH1000', 29900),
+            ('SON-WF1000', 19900)
         ]
 
-
-
-#here I just make a LOT of data to make graphs look good.
-        sales = []
         current_date = datetime.now()
-        start_date = current_date - timedelta(days=365) #here chatgpt helped me a bit because I did not know about timedelta
-        for i in range(1500): #I changed it from 500 to 1500 as now I use indexes.
-            random_days = random.randint(0,365)
+        start_date = current_date - timedelta(days=365)
+
+        for _ in range(1500):
+            random_days = random.randint(0, 365)
             sale_date = start_date + timedelta(days=random_days)
-            sale_source= random.choice(['Online', 'Store'])
+            sale_source = random.choice(['Online', 'Store'])
             promo_code = random.choice(['WELCOME10', None])
             sale_tax_rate = 20
-            cursor.execute('''
-                INSERT INTO Sale (sale_date, source_name, code_S_id, tax_rate)
-                VALUES (?, ?, ?, ?)
-            ''', (sale_date, sale_source, promo_code, sale_tax_rate))
-            sale_id = cursor.lastrowid
-            items_in_sale =  random.sample(sale_items_data, random.randint(1, 10))
+
+            sale = Sale(
+                sale_date=sale_date,
+                source_name=sale_source,
+                code_S_id=promo_code,
+                tax_rate=sale_tax_rate
+            )
+            session.add(sale)
+            session.commit()
+
+            items_in_sale = random.sample(sale_items_data, random.randint(1, 10))
             for item in items_in_sale:
-                barcode = item[0]
-                quantity = random.randint(1, 10)  
-                price = item[3]
-                cursor.execute('''
-                    INSERT INTO SaleItem (sale_SI_id, barcode_SI_id, quantity_sold, price_sold_without_vat)
-                    VALUES (?, ?, ?, ?)
-                ''', (sale_id,barcode,quantity,price))
-            conn.commit()
-    except sqlite3.Error as e:
-        print(f"SQLite error happened: {e}")
+                sale_item = SaleItem(
+                    sale_SI_id=sale.sale_id,
+                    barcode_SI_id=item[0],
+                    quantity_sold=random.randint(1, 10),
+                    price_sold_without_vat=item[1]
+                )
+                session.add(sale_item)
+
+        session.commit()
+
     except Exception as e:
-        print(f"An error happened: {e}")
+        session.rollback()
+        print(f"An error occurred: {e}")
     finally:
-        if conn:
-            conn.close()
-
-
+        session.close()
 
 if __name__ == '__main__':
     init_db()
