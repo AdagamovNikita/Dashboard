@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, Float, Date, DateTime, ForeignKey, func
+from sqlalchemy import create_engine, Column, Integer, String, Float, Date, DateTime, ForeignKey, func, Index
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime, timedelta
@@ -109,6 +109,14 @@ class SaleItem(Base):
     price_sold_without_vat = Column(Integer, nullable=False)
     sale = relationship('Sale', back_populates='items')
     product_option = relationship('ProductOption', back_populates='sale_items')
+
+# Create indexes for better performance
+Index('idx_productoption_barcode', ProductOption.barcode_id)
+Index('idx_productoption_product', ProductOption.product_PO_id)
+Index('idx_product_category', Product.category_P_id)
+Index('idx_sale_date', Sale.sale_date)
+Index('idx_saleitem_sale', SaleItem.sale_SI_id)
+Index('idx_product_brand', Product.brand_name)
 
 # Создаем движок и таблицы
 engine = create_engine('sqlite:///store.db')
