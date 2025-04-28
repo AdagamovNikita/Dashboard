@@ -5,9 +5,7 @@ from datetime import datetime
 app = Flask(__name__)
 
 def get_db_connection():
-    """Connect to the database and return the connection object"""
     try:
-        # Connect to the database
         conn = sqlite3.connect('store.db')
         conn.row_factory = sqlite3.Row
         return conn
@@ -97,7 +95,7 @@ def top_products():
             FROM
                 SaleItem si
             JOIN
-                ProductOption po ON si.barcode_SI_id= po.barcode_id
+                ProductOption po ON si.barcode_SI_id = po.barcode_id
             JOIN
                 Product p ON po.product_PO_id = p.product_id
             GROUP BY
@@ -325,15 +323,15 @@ def add_sale():
     model = request.form.get('model')
     quantity_str = request.form.get('quantity')
     if not brand or not model or not quantity_str:
-        return jsonify({"error": "Missing required fields"}), 400
+        return jsonify({"error": "Please fill in all required fields"})
+    if not quantity_str.isdigit():
+        return jsonify({"error": "Quantity must be a number"})
+    quantity = int(quantity_str)
+    conn = None
     try:
-        quantity = int(quantity_str)
-    except ValueError:
-        return jsonify({"error": "Quantity must be a number"}), 400
-    conn = sqlite3.connect('store.db')
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    try:
+        conn = sqlite3.connect('store.db')
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
         cursor.execute('''
             SELECT po.barcode_id, po.quantity, po.sale_price
             FROM Product p
@@ -342,9 +340,9 @@ def add_sale():
         ''', (brand, model))
         product = cursor.fetchone()
         if not product:
-            return jsonify({"error": "Product not found"}), 404
+            return jsonify({"error": "Product not found"})
         if product['quantity'] < quantity:
-            return jsonify({"error": "Not enough stock"}), 400
+            return jsonify({"error": "Not enough stock"})
         cursor.execute('''
             UPDATE ProductOption
             SET quantity = quantity - ?
@@ -361,11 +359,14 @@ def add_sale():
         ''', (sale_id, product['barcode_id'], quantity, product['sale_price']))
         conn.commit()
         return jsonify({"success": "Sale recorded successfully"})
-    except Exception:
-        conn.rollback()
-        return jsonify({"error": "Database error"}), 500
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        print(f"Error: {e}")
+        return jsonify({"error": "Sorry, there is a server problem :("})
     finally:
-        conn.close()
+        if conn:
+            conn.close()
 
 
 
@@ -375,15 +376,15 @@ def change_price():
     model = request.form.get('model')
     new_price_str = request.form.get('new_price')
     if not brand or not model or not new_price_str:
-        return jsonify({"error": "Missing required fields"}), 400
+        return jsonify({"error": "Please fill in all required fields"})
+    if not new_price_str.isdigit():
+        return jsonify({"error": "Price must be a number"})
+    new_price = int(new_price_str)
+    conn = None
     try:
-        new_price = int(new_price_str)
-    except ValueError:
-        return jsonify({"error": "Price must be a number"}), 400
-    conn = sqlite3.connect('store.db')
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    try:
+        conn = sqlite3.connect('store.db')
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
         cursor.execute('''
             SELECT po.barcode_id, po.sale_price
             FROM Product p
@@ -392,7 +393,7 @@ def change_price():
         ''', (brand, model))
         product = cursor.fetchone()
         if not product:
-            return jsonify({"error": "Product not found"}), 404
+            return jsonify({"error": "Product not found"})
         cursor.execute('''
             UPDATE ProductOption
             SET sale_price = ?
@@ -404,11 +405,14 @@ def change_price():
         ''', (product['barcode_id'], product['sale_price'], new_price))
         conn.commit()
         return jsonify({"success": "Price updated successfully"})
-    except Exception:
-        conn.rollback()
-        return jsonify({"error": "Database error"}), 500
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        print(f"Error: {e}")
+        return jsonify({"error": "Sorry, there is a server problem :("})
     finally:
-        conn.close()
+        if conn:
+            conn.close()
 
 
 if __name__ == '__main__':
