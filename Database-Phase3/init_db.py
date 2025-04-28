@@ -4,17 +4,24 @@ from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime, timedelta
 import random
 import time
-
 random.seed(time.time())
 
-Base = declarative_base()
 
-# Модели таблиц
+
+Base = declarative_base()
+engine = create_engine('sqlite:///store.db')
+Base.metadata.create_all(engine)
+Session = sessionmaker(bind=engine)
+
+
+
 class ProductCategory(Base):
     __tablename__ = 'ProductCategory'
     category_id = Column(Integer, primary_key=True)
     category_name = Column(String, nullable=False)
     products = relationship('Product', back_populates='category')
+
+
 
 class Product(Base):
     __tablename__ = 'Product'
@@ -25,6 +32,8 @@ class Product(Base):
     category = relationship('ProductCategory', back_populates='products')
     options = relationship('ProductOption', back_populates='product')
     suppliers = relationship('ProductSupplier', back_populates='product')
+
+
 
 class ProductOption(Base):
     __tablename__ = 'ProductOption'
@@ -38,17 +47,23 @@ class ProductOption(Base):
     price_history = relationship('PriceHistory', back_populates='product_option')
     sale_items = relationship('SaleItem', back_populates='product_option')
 
+
+
 class AttributeName(Base):
     __tablename__ = 'AttributeName'
     attribute_name_id = Column(Integer, primary_key=True)
     attribute_name = Column(String, nullable=False, unique=True)
     attributes = relationship('ProductAttribute', back_populates='attribute_name')
 
+
+
 class AttributeValue(Base):
     __tablename__ = 'AttributeValue'
     attribute_value_id = Column(Integer, primary_key=True)
     attribute_value = Column(String, nullable=False, unique=True)
     attributes = relationship('ProductAttribute', back_populates='attribute_value')
+
+
 
 class ProductAttribute(Base):
     __tablename__ = 'ProductAttribute'
@@ -59,6 +74,8 @@ class ProductAttribute(Base):
     attribute_name = relationship('AttributeName', back_populates='attributes')
     attribute_value = relationship('AttributeValue', back_populates='attributes')
 
+
+
 class PriceHistory(Base):
     __tablename__ = 'PriceHistory'
     price_id = Column(Integer, primary_key=True)
@@ -68,6 +85,8 @@ class PriceHistory(Base):
     change_date = Column(DateTime, nullable=False)
     product_option = relationship('ProductOption', back_populates='price_history')
 
+
+
 class Supplier(Base):
     __tablename__ = 'Supplier'
     supplier_id = Column(Integer, primary_key=True)
@@ -76,12 +95,17 @@ class Supplier(Base):
     address = Column(String)
     products = relationship('ProductSupplier', back_populates='supplier')
 
+
+
 class ProductSupplier(Base):
     __tablename__ = 'ProductSupplier'
     product_PS_id = Column(Integer, ForeignKey('Product.product_id'), primary_key=True)
     supplier_PS_id = Column(Integer, ForeignKey('Supplier.supplier_id'), primary_key=True)
     product = relationship('Product', back_populates='suppliers')
     supplier = relationship('Supplier', back_populates='products')
+
+
+
 class PromoCode(Base):
     __tablename__ = 'PromoCode'
     code_id = Column(String, primary_key=True)
@@ -89,6 +113,8 @@ class PromoCode(Base):
     valid_from = Column(Date, nullable=False)
     valid_to = Column(Date, nullable=False)
     sales = relationship('Sale', back_populates='promo_code')
+
+
 
 class Sale(Base):
     __tablename__ = 'Sale'
@@ -100,6 +126,8 @@ class Sale(Base):
     promo_code = relationship('PromoCode', back_populates='sales')
     items = relationship('SaleItem', back_populates='sale')
 
+
+
 class SaleItem(Base):
     __tablename__ = 'SaleItem'
     sale_item_id = Column(Integer, primary_key=True)
@@ -110,7 +138,8 @@ class SaleItem(Base):
     sale = relationship('Sale', back_populates='items')
     product_option = relationship('ProductOption', back_populates='sale_items')
 
-# Create indexes for better performance
+
+
 Index('idx_productoption_barcode', ProductOption.barcode_id)
 Index('idx_productoption_product', ProductOption.product_PO_id)
 Index('idx_product_category', Product.category_P_id)
@@ -118,21 +147,15 @@ Index('idx_sale_date', Sale.sale_date)
 Index('idx_saleitem_sale', SaleItem.sale_SI_id)
 Index('idx_product_brand', Product.brand_name)
 
-# Создаем движок и таблицы
-engine = create_engine('sqlite:///store.db')
-Base.metadata.create_all(engine)
-Session = sessionmaker(bind=engine)
+
 
 def init_db():
     session = Session()
     try:
-        # Добавляем категории
         categories = ['Smartphones', 'Laptops', 'Tablets', 'Smartwatches', 'Accessories']
         for cat_name in categories:
             session.add(ProductCategory(category_name=cat_name))
         session.commit()
-
-        # Добавляем поставщиков
         suppliers = [
             Supplier(supplier_name='TechGlobal Inc.', phone_number='+1-555-0123',
                     address='123 Tech Street, Silicon Valley, CA'),
@@ -148,7 +171,8 @@ def init_db():
         session.add_all(suppliers)
         session.commit()
 
-        # Добавляем промокод
+
+
         promo_code = PromoCode(
             code_id='WELCOME10',
             discount_percentage=10,
@@ -158,7 +182,8 @@ def init_db():
         session.add(promo_code)
         session.commit()
 
-        # Добавляем продукты
+
+
         products_data = [
             ('iPhone 15 Pro', 1, 'Apple', 'APP15P-256', 50, 80000, 99900),
             ('iPhone 15', 1, 'Apple', 'APP15-128', 75, 60000, 79900),
@@ -187,11 +212,11 @@ def init_db():
             ('IdeaPad 5', 2, 'Lenovo', 'LEN-IDEA5', 60, 60000, 79900)
         ]
 
-        # Добавляем атрибуты цвета
+
+        
         color_attr = AttributeName(attribute_name='Color')
         session.add(color_attr)
         session.commit()
-
         colors = ['Black', 'White', 'Silver', 'Blue', 'Red', 'Green']
         color_values = {}
         for color in colors:
@@ -199,9 +224,7 @@ def init_db():
             session.add(color_value)
             session.commit()
             color_values[color] = color_value.attribute_value_id
-# Добавляем продукты и их опции
         for product in products_data:
-            # Создаем продукт
             new_product = Product(
                 model=product[0],
                 category_P_id=product[1],
@@ -209,8 +232,6 @@ def init_db():
             )
             session.add(new_product)
             session.commit()
-
-            # Создаем опцию продукта
             product_option = ProductOption(
                 barcode_id=product[3],
                 product_PO_id=new_product.product_id,
@@ -220,8 +241,6 @@ def init_db():
             )
             session.add(product_option)
             session.commit()
-
-            # Добавляем цвет
             random_color = random.choice(colors)
             product_attr = ProductAttribute(
                 barcode_PA_id=product_option.barcode_id,
@@ -229,8 +248,6 @@ def init_db():
                 attribute_value_id=color_values[random_color]
             )
             session.add(product_attr)
-
-            # Добавляем историю цен
             price_history = PriceHistory(
                 barcode_PH_id=product_option.barcode_id,
                 old_price=product[5],
@@ -238,17 +255,15 @@ def init_db():
                 change_date=datetime.now()
             )
             session.add(price_history)
-
-            # Добавляем поставщика
             product_supplier = ProductSupplier(
                 product_PS_id=new_product.product_id,
                 supplier_PS_id=random.randint(1, 5)
             )
             session.add(product_supplier)
-
         session.commit()
 
-        # Добавляем продажи
+
+
         sale_items_data = [
             ('APP15P-256', 99900),
             ('APP15-128', 79900),
@@ -268,16 +283,16 @@ def init_db():
             ('SON-WF1000', 19900)
         ]
 
+
+
         current_date = datetime.now()
         start_date = current_date - timedelta(days=365)
-
         for _ in range(1500):
             random_days = random.randint(0, 365)
             sale_date = start_date + timedelta(days=random_days)
             sale_source = random.choice(['Online', 'Store'])
             promo_code = random.choice(['WELCOME10', None])
             sale_tax_rate = 20
-
             sale = Sale(
                 sale_date=sale_date,
                 source_name=sale_source,
@@ -286,7 +301,6 @@ def init_db():
             )
             session.add(sale)
             session.commit()
-
             items_in_sale = random.sample(sale_items_data, random.randint(1, 10))
             for item in items_in_sale:
                 sale_item = SaleItem(
@@ -296,14 +310,14 @@ def init_db():
                     price_sold_without_vat=item[1]
                 )
                 session.add(sale_item)
-
         session.commit()
-
     except Exception as e:
         session.rollback()
         print(f"An error occurred: {e}")
     finally:
         session.close()
+
+
 
 if __name__ == '__main__':
     init_db()

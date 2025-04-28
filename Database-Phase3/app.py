@@ -113,10 +113,6 @@ def top_products():
         ).select_from(SaleItem).join(
             ProductOption, SaleItem.barcode_SI_id == ProductOption.barcode_id
         ).first()
-        print(f"Products found: {len(products)}")
-        for p in products:
-            print(f"Product: {p.Brand} {p.Model}, Quantity: {p.TotalQuantitySold}")
-        print(f"Profit: {profit[0] if profit[0] else 0}")
         return jsonify({
             'products': [dict(row) for row in products],
             'profit': profit[0] / 100 if profit[0] else 0
