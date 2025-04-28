@@ -2,7 +2,7 @@ from flask import Flask, render_template, jsonify, request, redirect, url_for
 from sqlalchemy import create_engine, func
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
-from models import Base, Product, ProductCategory, ProductOption, AttributeName, AttributeValue, ProductAttribute, Sale, SaleItem, Supplier, ProductSupplier, PromoCode, PriceHistory
+from init_db import Base, Product, ProductCategory, ProductOption, AttributeName, AttributeValue, ProductAttribute, Sale, SaleItem, Supplier, ProductSupplier, PromoCode, PriceHistory
 
 app = Flask(__name__)
 
