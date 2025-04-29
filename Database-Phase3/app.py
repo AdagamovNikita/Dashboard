@@ -328,7 +328,7 @@ def add_sale():
             tax_rate=20
         )
         session.add(new_sale)
-        session.flush()  
+        session.commit()
         new_sale_item = SaleItem(
             sale_SI_id=new_sale.sale_id,
             barcode_SI_id=product_option.barcode_id,

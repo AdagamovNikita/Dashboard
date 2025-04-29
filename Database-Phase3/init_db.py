@@ -221,7 +221,7 @@ def init_db():
         session.add(color_attr)
         session.commit()
         colors = ['Black','White','Silver','Blue','Red','Green']
-        color_values ={}
+        color_values ={} #the logic of this part of the code was quite difficult for me so chatgpt helped me here
         for color in colors:
             color_value = AttributeValue(attribute_value = color)
             session.add(color_value)
