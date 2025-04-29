@@ -7,9 +7,8 @@ from init_db import Base, Product, ProductCategory, ProductOption, AttributeName
 
 
 app = Flask(__name__)
-engine = create_engine('sqlite:///store.db')
-Base.metadata.bind = engine
-DBSession = sessionmaker(bind=engine)
+engine = create_engine('sqlite:///store.db') #just a connection to a database
+DBSession = sessionmaker(bind = engine) #other name as we have Session in init_db but the functionality is the same
 
 
 
@@ -17,20 +16,20 @@ def get_db_session():
     try:
         session = DBSession()
         return session
-    except Exception as e:
+    except Exception as  e:
         print(f"Error: {e}")
         return None
 
 
-
+#so, for the backend I used our lectures about the Flask as a reference. And for the final phase I just rewrite absolutely the same but with orm
 @app.route('/')
 def index():
     session = get_db_session()
     if not session:
-        return jsonify({"error": "Sorry, there is a server problem :("})
+        return jsonify({"error": "Sorry, there is a server problem :( "})
     try:
         brands = session.query(Product.brand_name).distinct().order_by(Product.brand_name).all()
-        return render_template('index.html', brands=brands)
+        return render_template('index.html',brands=brands)
     except Exception as e:
         print(f"Error: {e}")
         return jsonify({"error": "Sorry, there is a server problem :("})
@@ -39,7 +38,7 @@ def index():
 
 
 
-@app.route('/search_brand', methods=['POST'])
+@app.route('/search_brand',methods=['POST'])
 def search_brand():
     brand = request.form.get('brand')
     if not brand:
@@ -60,11 +59,11 @@ def search_brand():
         ).join(
             ProductOption, Product.product_id == ProductOption.product_PO_id
         ).outerjoin(
-            ProductAttribute, ProductOption.barcode_id == ProductAttribute.barcode_PA_id
+            ProductAttribute,ProductOption.barcode_id == ProductAttribute.barcode_PA_id
         ).outerjoin(
-            AttributeName, ProductAttribute.attribute_name_id == AttributeName.attribute_name_id
+            AttributeName,ProductAttribute.attribute_name_id == AttributeName.attribute_name_id
         ).outerjoin(
-            AttributeValue, ProductAttribute.attribute_value_id == AttributeValue.attribute_value_id
+            AttributeValue,ProductAttribute.attribute_value_id == AttributeValue.attribute_value_id
         ).outerjoin(
             SaleItem, ProductOption.barcode_id == SaleItem.barcode_SI_id
         ).outerjoin(
@@ -75,12 +74,12 @@ def search_brand():
             Product.brand_name == brand
         ).group_by(
             Product.brand_name, Product.model,
-            AttributeName.attribute_name, AttributeValue.attribute_value,
+            AttributeName.attribute_name,AttributeValue.attribute_value,
             ProductOption.quantity, ProductOption.wholesale_price, ProductOption.sale_price
         ).order_by(
             Product.brand_name, Product.model
         ).all()
-        return render_template('search_results.html', results=results, brand=brand)
+        return render_template('search_results.html', results = results, brand = brand)
     except Exception as e:
         print(f"Error: {e}")
         return jsonify({"error": "Sorry, there is a server problem :("})
@@ -104,22 +103,22 @@ def top_products():
         ).join(
             Product, ProductOption.product_PO_id == Product.product_id
         ).group_by(
-            Product.product_id, Product.brand_name, Product.model
+            Product.product_id,Product.brand_name,Product.model
         ).order_by(
             func.sum(SaleItem.quantity_sold).desc()
         ).limit(5).all()
-        profit = session.query(
+        profit= session.query(
             func.sum((ProductOption.sale_price - ProductOption.wholesale_price) * SaleItem.quantity_sold).label('profit')
         ).select_from(SaleItem).join(
             ProductOption, SaleItem.barcode_SI_id == ProductOption.barcode_id
         ).first()
         return jsonify({
             'products': [dict(row) for row in products],
-            'profit': profit[0] / 100 if profit[0] else 0
+            'profit': profit[0] / 100 #I decided to store everything related to money in cents instead of euros and then divide by 100 for display
         })
     except Exception as e:
-        print(f"Error in top_products: {e}")
-        return jsonify({"error": "Sorry, there is a server problem :("})
+        print(f"Error: {e}")
+        return  jsonify({"error": "Sorry, there is a server problem :("})
     finally:
         session.close()
 
@@ -127,20 +126,20 @@ def top_products():
 
 @app.route('/api/top_categories')
 def top_categories():
-    session = get_db_session()
+    session=get_db_session()
     if not session:
-        return jsonify({"error": "Sorry, there is a server problem :("})
+        return jsonify({"error": "Sorry, there is a server problem :( "})
     try:
         categories = session.query(
             ProductCategory.category_name.label('Category'),
             func.count(Product.product_id).label('NumberOfProducts'),
             func.sum(SaleItem.quantity_sold).label('TotalQuantitySold')
         ).join(
-            Product, ProductCategory.category_id == Product.category_P_id
+            Product,ProductCategory.category_id == Product.category_P_id
         ).join(
-            ProductOption, Product.product_id == ProductOption.product_PO_id
+            ProductOption,Product.product_id == ProductOption.product_PO_id
         ).join(
-            SaleItem, ProductOption.barcode_id == SaleItem.barcode_SI_id
+            SaleItem,ProductOption.barcode_id == SaleItem.barcode_SI_id
         ).group_by(
             ProductCategory.category_id, ProductCategory.category_name
         ).order_by(
@@ -153,7 +152,7 @@ def top_categories():
         ).first()
         return jsonify({
             'categories': [dict(row) for row in categories],
-            'revenue': revenue[0] / 100 if revenue[0] else 0
+            'revenue': revenue[0] / 100 #same logic
         })
     except Exception as e:
         print(f"Error: {e}")
@@ -187,9 +186,9 @@ def product_details():
         ).join(
             Supplier, ProductSupplier.supplier_PS_id == Supplier.supplier_id
         ).group_by(
-            Product.product_id, Product.brand_name, Product.model,
+            Product.product_id,Product.brand_name, Product.model,
             ProductOption.sale_price, ProductOption.wholesale_price,
-            Supplier.supplier_name, Supplier.phone_number, Supplier.address
+            Supplier.supplier_name,Supplier.phone_number, Supplier.address
         ).order_by(
             func.sum(SaleItem.quantity_sold).desc()
         ).all()
@@ -222,13 +221,13 @@ def category_details():
         ).join(
             SaleItem, ProductOption.barcode_id == SaleItem.barcode_SI_id
         ).group_by(
-            ProductCategory.category_id, ProductCategory.category_name
+            ProductCategory.category_id,ProductCategory.category_name
         ).order_by(
             func.sum(SaleItem.quantity_sold).desc()
         ).all()
         return jsonify([dict(row) for row in categories])
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Error:{e}")
         return jsonify({"error": "Sorry, there is a server problem :("})
     finally:
         session.close()
@@ -252,22 +251,22 @@ def get_chart_filters():
         })
     except Exception as e:
         print(f"Error: {e}")
-        return jsonify({"error": "Sorry, there is a server problem :("})
+        return jsonify({"error": "Sorry, there is a server problem :( "})
     finally:
         session.close()
 
 
 
-@app.route('/api/sales-data', methods=['POST'])
+@app.route('/api/sales-data',methods=['POST'])
 def get_sales_data():
-    category_id = request.form.get('category_id')
+    category_id=request.form.get('category_id')
     if not category_id:
         return jsonify({"error": "Category is required"})
-    session = get_db_session()
+    session=get_db_session()
     if not session:
         return jsonify({"error": "Sorry, there is a server problem :("})
     try:
-        results = session.query(
+        results= session.query(
             Sale.sale_date.label('SaleDate'),
             Product.category_P_id.label('category_id'),
             func.sum(SaleItem.quantity_sold).label('TotalQuantity'),
@@ -281,14 +280,14 @@ def get_sales_data():
         ).filter(
             Product.category_P_id == category_id
         ).group_by(
-            Sale.sale_date, Product.category_P_id
+            Sale.sale_date,Product.category_P_id
         ).order_by(
             Sale.sale_date
         ).all()
         return jsonify([{
             'date': row.SaleDate,
             'quantity': row.TotalQuantity,
-            'sales': row.TotalSales / 100
+            'sales': row.TotalSales / 100 #same logic
         } for row in results])
     except Exception as e:
         print(f"Error: {e}")
@@ -300,10 +299,10 @@ def get_sales_data():
 
 @app.route('/add_sale', methods=['POST'])
 def add_sale():
-    brand = request.form.get('brand')
-    model = request.form.get('model')
+    brand=request.form.get('brand')
+    model=request.form.get('model')
     quantity_str = request.form.get('quantity')
-    if not brand or not model or not quantity_str:
+    if not brand or not model or not quantity_str: #just data validation
         return jsonify({"error": "Please fill in all required fields"})
     if not quantity_str.isdigit():
         return jsonify({"error": "Quantity must be a number"})
@@ -313,7 +312,7 @@ def add_sale():
         return jsonify({"error": "Sorry, there is a server problem :("})
     try:
         product_option = session.query(ProductOption).join(
-            Product, Product.product_id == ProductOption.product_PO_id
+            Product,Product.product_id == ProductOption.product_PO_id
         ).filter(
             Product.brand_name == brand,
             Product.model == model
@@ -338,7 +337,7 @@ def add_sale():
         )
         session.add(new_sale_item)
         session.commit()
-        return jsonify({"success": "Sale recorded successfully"})
+        return jsonify({"success": "Sale recorded sucessfully"})
     except Exception as e:
         session.rollback()
         print(f"Error: {e}")
@@ -348,17 +347,17 @@ def add_sale():
 
 
 
-@app.route('/change_price', methods=['POST'])
+@app.route('/change_price',methods=['POST'])
 def change_price():
-    brand = request.form.get('brand')
-    model = request.form.get('model')
+    brand=request.form.get('brand')
+    model=request.form.get('model')
     new_price_str = request.form.get('new_price')
-    if not brand or not model or not new_price_str:
+    if not brand or not model or not new_price_str: #same logic
         return jsonify({"error": "Please fill in all required fields"})
     if not new_price_str.isdigit():
         return jsonify({"error": "Price must be a number"})
     new_price = int(new_price_str)
-    session = get_db_session()
+    session=get_db_session()
     if not session:
         return jsonify({"error": "Sorry, there is a server problem :("})
     try:
@@ -382,7 +381,7 @@ def change_price():
         return jsonify({"success": "Price updated successfully"})
     except Exception as e:
         session.rollback()
-        print(f"Error: {e}")
+        print(f"Error:  {e}")
         return jsonify({"error": "Sorry, there is a server problem :("})
     finally:
         session.close()
