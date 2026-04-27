@@ -1,28 +1,31 @@
-# Electronics Store Dashboard (Database Project Phase 2)
+<img width="1280" height="811" alt="photo_2026-04-27_02-55-33" src="https://github.com/user-attachments/assets/b485ff7a-b980-48a5-95fa-bfb9ecaaacca" />
+<img width="1280" height="451" alt="photo_2026-04-27_02-55-33 (2)" src="https://github.com/user-attachments/assets/dc56b838-0aff-4693-b44b-1cbba71fbf87" />
+
+# Electronics Store Dashboard 
 
 ## Project Essence
 
-This project is the second phase of a Database course (CMPS244). The main goal is to build a functional web application that interacts with a complex relational database. It simulates a real-world electronics store management system where you can track inventory, sales, suppliers, and price changes.
+This project is the final phase of a Database course(CMPS244). The main goal is to build a functional web application that interacts with a complex relational database. It simulates a real-world electronics store management system where you can track inventory, sales, suppliers, and price changes.
 
 The application provides a "Dashboard" view to help managers see how the business is performing. It includes data visualization, search capabilities, and tools to update the database.
 
 ## Tech Stack
 
-- **Backend:** Python 3 with **Flask** (a lightweight web framework).
+- **Backend:** Python 3 with **Flask**.
 - **Database:** **SQLite3**. A relational database used to store products, categories, sales, and more.
 - **Frontend:** Standard **HTML5**, **CSS3**, and **JavaScript**.
 - **Data Visualization:** **Apache ECharts** library is used to generate dynamic line charts for sales trends.
 
 ## Detailed Functionality
 
-### 1. Business Analytics (Dashboard)
+### 1. Business Analytics 
 - **Top 5 Selling Products:** A table showing the most popular items based on quantity sold.
-- **Top 5 Selling Categories:** Displays which product categories (like Smartphones or Laptops) generate the most volume.
+- **Top 5 Selling Categories:** Displays which product categories generate the most volume.
 - **Financial Metrics:** Real-time calculation of **Total Profit** and **Total Revenue** across all sales.
 - **Sales Trends:** A dynamic line chart that shows daily sales and quantity sold. You can filter this chart by specific product categories.
 
 ### 2. Product & Inventory Management
-- **Brand Search:** A dedicated search feature to find all products belonging to a specific brand (e.g., Apple, Samsung).
+- **Brand Search:** A dedicated search feature to find all products belonging to a specific brand.
 - **Product Details:** View comprehensive info including brand, model, price, margin percentage, and supplier contact details.
 - **Category Statistics:** Breakdown of each category with product counts, average prices, and maximum prices.
 - **Inventory Updates:** A functional form to record new sales, which automatically reduces the stock quantity in the database.
@@ -31,11 +34,11 @@ The application provides a "Dashboard" view to help managers see how the busines
 ### 3. Database Architecture
 The project uses a structured relational database with the following key tables:
 - **Product & Category:** Defines the catalog of items.
-- **ProductOption & Attributes:** Handles different versions of products (e.g., different colors or storage sizes) using EAV-like attributes.
-- **Sales & SaleItems:** Tracks every transaction, including dates, sources (Online/Store), and quantities.
+- **ProductOption & Attributes:** Handles different versions of products using EAV-like attributes.
+- **Sales & SaleItems:** Tracks every transaction, including dates, sources(Online/Store), and quantities.
 - **Suppliers:** Stores contact information for tech providers.
 - **PriceHistory:** Keeps a record of every price change for audit purposes.
-- **Performance:** Database indexes are implemented on frequently searched columns (like barcodes, dates, and brands) to ensure the app stays fast even with thousands of records.
+- **Performance:** Database indexes are implemented on frequently searched columns to ensure the app stays fast even with thousands of records.
 
 ## Setup & Installation
 
@@ -63,13 +66,6 @@ The project uses a structured relational database with the following key tables:
    ```
 5. **Access the Dashboard**
    Open your browser and go to `http://127.0.0.1:5000`.
-
-## Project Structure
-- `app.py`: The "brain" of the app. Handles all web requests and database queries.
-- `init_db.py`: The database architect. Creates tables and seeds them with realistic data.
-- `store.db`: The SQLite database file.
-- `templates/`: Contains HTML files (`index.html` for the dashboard, `search_results.html` for search).
-- `requirements.txt`: List of necessary Python libraries.
 
 ---
 *Created for CMPS244 - Database Systems.*
