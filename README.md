@@ -1,5 +1,7 @@
 <img width="1280" height="811" alt="photo_2026-04-27_02-55-33" src="https://github.com/user-attachments/assets/b485ff7a-b980-48a5-95fa-bfb9ecaaacca" />
 <img width="1280" height="451" alt="photo_2026-04-27_02-55-33 (2)" src="https://github.com/user-attachments/assets/dc56b838-0aff-4693-b44b-1cbba71fbf87" />
+[assignment1(DB).pdf](https://github.com/user-attachments/files/27121159/assignment1.DB.pdf)
+[assignment2(normalization).pdf](https://github.com/user-attachments/files/27121170/assignment2.normalization.pdf)
 
 # Electronics Store Dashboard 
 
